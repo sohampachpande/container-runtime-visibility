@@ -1,0 +1,2 @@
+-r ../requirements-datastore.txt
+streamlit==1.50.0

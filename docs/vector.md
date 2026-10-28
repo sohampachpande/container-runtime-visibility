@@ -11,8 +11,9 @@ deferred. Prometheus scraping and execution of a rate query remain unverified.
 ```text
 /var/log/tetragon/tetragon.log
   → file source with persistent read checkpoints
-  → parse and normalize execution/exit events
+  → common envelope for process/file/network events
       → structured JSON on stdout
+      → persistent JSONL staging
       → runtime_events_total{host,event_type} on /metrics
   → rejected records on stderr
 ```
@@ -24,18 +25,33 @@ No new APT package, Docker socket access, or privileged container is needed.
 ## Event and metric choices
 
 The common log envelope contains `schema_version`, `collector`, `timestamp`,
-`event_type`, `host`, `process`, `parent`, and `container`. The complete original
+`event_type`, `category`, `host`, `process`, `parent`, and `container`, plus
+nullable `policy`, `hook`, `file`, and `network` details. The complete original
 JSON object is retained under `tetragon`, including exit status and event-specific
 fields. `container.id_prefix` carries Tetragon's truncated Docker identity;
 it is not presented as a full container ID. Missing metadata remains null.
 
-Only process execution and exit are normalized in this step. Malformed JSON,
-missing required fields, and other event types are routed to the rejection
-output instead of counted as valid events. Additional schemas are Milestone 5.
-The inline tests cover execution, exit, malformed JSON, and metric-label isolation.
+Milestone 5 adds explicit policy-and-hook mappings for `runtime-sensitive-file`
+and `runtime-network-connect`. Both use transport type `process_kprobe`, so
+the transport alone does not determine the category. File details contain path,
+permission mask, and permission-hook result; network details contain endpoints,
+family, protocol, state, outbound direction, and `connect_attempt` observation.
+Arguments are selected by their exported type, not a fixed array position.
+Absent optional context remains null; unknown valid payloads use category
+`other` and retain their original object. Malformed JSON, missing timestamp or
+host, non-object payloads, and ambiguous multiple payloads are rejected.
+
+The envelope remains schema version 1 with additive fields. The importer assigns
+`event_id` from canonical original JSON during projection into Parquet/DuckDB;
+Vector does not assign a second identity. Previously staged version-1 records
+may lack the added category/details, and imports do not rewrite existing rows.
+Eleven pinned-image tests cover the original lifecycle behavior, both new
+mappings, optional fields, unknown payloads, rejection, and label isolation.
 
 The counter increases once per normalized record and has exactly two labels:
-host and event type. PIDs, executable paths, arguments, execution IDs, and
+host and event type. The `event_type` label uses `metric_event_type`, a bounded
+list of pinned Tetragon payload types; future unrecognized types use `other`.
+PIDs, executable paths, arguments, execution IDs, and
 container IDs remain in logs. The counter counts exported records, including
 startup-discovered processes; it is not a count of all kernel calls.
 
@@ -43,7 +59,10 @@ A counter supports event-rate queries such as
 `rate(runtime_events_total[1m])` when scraped by Prometheus. The exporter alone
 does not calculate that query or retain a time series; deploying Prometheus
 is outside this step. Exported counters omit event timestamps so Prometheus
-can assign scrape time. Counters reset when Vector restarts.
+can assign scrape time. Counter expiration is now disabled explicitly, so idle
+series retain their accumulated value while Vector runs. Counters reset when
+Vector restarts. An isolated pinned-image check retained the same counter value
+after 65 seconds without input on 2026-10-27.
 
 ## Permissions, checkpoints, and resource limits
 
@@ -57,18 +76,25 @@ and loopback port 9598. Its JSON console output is retained in Docker logs
 with three 10 MB files. This is bounded demo retention, not durable archival.
 Measure actual memory alongside Tetragon and Juice Shop before adding services.
 
-The file source starts at the end on first discovery so the first run does
-not replay all previous exercises. A named volume preserves checkpoints on
-subsequent runs. It mounts the directory rather than a single file so log
-rotation can be followed. Checkpoints are not an exactly-once guarantee;
-outages, rotation, and container restarts need further operational testing.
+The file source now includes the active file and Tetragon's timestamped rotated
+`.log` backups, reading uncheckpointed files from the beginning. This trades
+initial historical replay for an opportunity to recover retained events after
+an outage and rotation. A named volume preserves checkpoints on subsequent
+runs. The directory mount allows rotation to be followed. Events deleted by
+Tetragon's retention cannot be recovered, and checkpoints are not an exactly-
+once guarantee. An isolated pinned-image test stopped Vector, rotated its
+controlled input, appended a record to the retained backup, created a new active
+file, and restarted with the same checkpoint directory. Both unread records
+were recovered and the checkpointed record was not replayed. This verifies the
+file-reader configuration, not collector-driven rotation under sustained load
+or crash/power-loss recovery.
 
 ## Validate and run with Compose
 
 The root `compose.yaml` contains Vector alongside Tetragon and Juice Shop.
 For development, combine it with `compose.desktop.yaml`. Follow
 [the Docker Desktop guide](docker-desktop.md) for configuration validation,
-the four Vector tests, startup, logs, and shutdown commands.
+the Vector tests, startup, logs, and shutdown commands.
 
 The override creates the `runtime-visibility-desktop-vector-data` checkpoint
 volume automatically. Vector reads the shared Tetragon log volume read-only.
@@ -90,3 +116,16 @@ The full Compose deployment is verified on Docker Desktop. Run
 `python3 scripts/verify-pipeline.py --desktop` for the repeatable acceptance
 check. It validates event correlation and counter labels; it does not execute
 a Prometheus rate query or test checkpoint recovery.
+
+## Milestone 5 staging
+
+The `staging` sink writes the normalized process/file/network envelope
+as JSONL under `/var/lib/vector/staging/` on the persistent checkpoint volume.
+Pinned-image validation, all 11 transform tests, execution/exit acceptance, and
+fresh all-category staging/Parquet/DuckDB checks passed on 2026-10-27.
+
+Use [the batch ingestion guide](datastore-ingestion.md) to stop/flush Vector,
+copy completed files, and convert/import them into Parquet and DuckDB. Date-based
+filenames can be reopened by late events, so do not convert active files.
+Staging retention is not automatically bounded; measure usage and implement
+cleanup before relying on unattended capture.

@@ -22,6 +22,12 @@ services:
         bind:
           create_host_path: false
       - type: bind
+        source: ./collector/tetragon/policies
+        target: /etc/tetragon/policies
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
         source: /var/log/tetragon
         target: /var/log/tetragon
         bind:
@@ -65,6 +71,29 @@ services:
         max-size: "10m"
         max-file: "3"
 
+  datastore-ui:
+    profiles: ["ui"]
+    build:
+      context: .
+      dockerfile: datastore_ui/Dockerfile
+    mem_limit: 512m
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    depends_on:
+      - vector
+    volumes:
+      - vector-data:/source:ro
+      - datastore-data:/data
+    ports:
+      - "127.0.0.1:8501:8501"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
   juice-shop:
     image: bkimminich/juice-shop:v20.3.0
     ports:
@@ -77,6 +106,7 @@ services:
         max-file: "3"
 
 volumes:
+  datastore-data:
   vector-data:
     external: true
     name: vector-m4-data

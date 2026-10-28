@@ -1,0 +1,29 @@
+apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: runtime-sensitive-file
+spec:
+  kprobes:
+    - call: security_file_permission
+      syscall: false
+      return: true
+      args:
+        - index: 0
+          type: file
+        - index: 1
+          type: int
+      returnArg:
+        index: 0
+        type: int
+      selectors:
+        - matchBinaries:
+            - operator: In
+              values:
+                - /nodejs/bin/node
+          matchArgs:
+            - index: 0
+              operator: Prefix
+              values:
+                - /tmp/runtime-visibility-sensitive-
+          matchActions:
+            - action: Post

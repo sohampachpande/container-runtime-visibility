@@ -51,20 +51,27 @@ Raw kernel events are logs. Aggregated event rates, error counts, and anomaly sc
 Selected eBPF collector
   → JSON runtime-security events
   → Vector
-  → structured event output and low-cardinality metrics
+      → JSONL staging → Parquet batches → native DuckDB tables → SQL
+      → low-cardinality metrics
 ~~~
 
 Vector is the initial event-pipeline component. It keeps collection, normalization, routing, and metric derivation separate from kernel-hook code.
+The [datastore decision](datastore.md) selects local JSONL staging, Parquet batch
+conversion, and import into native DuckDB tables for analytical queries.
+The initial schema-v1 Parquet/DuckDB batch importer is implemented and tested
+offline; new event mappings and live storage validation remain pending.
+ClickHouse is the preferred next step if a shared analytical service is needed.
 
 ```mermaid
 flowchart LR
     K[Linux kernel events] --> A[Selected eBPF collector]
     A --> J[Structured JSON events]
     J --> V[Vector]
-    V --> L[Normalized security-event logs]
+    V --> L[Normalized JSONL staging]
+    L --> P[Completed Parquet batches]
+    P --> Q[Native DuckDB tables and SQL]
     V --> M[Low-cardinality event metrics]
     M --> D[Future anomaly detection]
-    D --> O[Future OpenSearch platform]
 ```
 
 ## Initial scope
@@ -73,9 +80,12 @@ Start with Tetragon process-execution events. This proves the complete collectio
 
 Add event sources incrementally:
 
-1. OOM victims
-2. File-access patterns
-3. Additional security events chosen after the first two sources are validated
+1. Sensitive-file access
+2. Outbound TCP connection observations
+3. Additional security events after these sources are validated
+
+OOM collection is outside Milestone 5; the original standalone debugging
+exercise remains available.
 
 The agent reports unavailable optional event sources at startup instead of assuming every Linux kernel exposes the same hooks.
 
@@ -93,7 +103,11 @@ Use workload, namespace, event type, and destination class as detector keys. Do 
 
 The initial project does not include a platform-backed anomaly engine. Start with event collection and the Vector pipeline, then add statistical detection after the event schema and baseline event rates are understood.
 
-OpenSearch is a future option for raw-event search and anomaly scoring. It is deliberately deferred because it is a full search and analytics platform that must be deployed and operated.
+OpenSearch was considered and not selected for the current SQL analytical
+workflow. DuckDB is the initial query engine, with ClickHouse as the preferred
+next step if measured ingestion or query-serving needs require it. The optional
+[local dashboard](datastore-ui.md) adds charts and a read-only SQL editor in a
+separate container; alerting and a custom application API remain future work.
 
 ## Long-term target: AI agent runtime monitoring
 

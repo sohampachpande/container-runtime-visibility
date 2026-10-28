@@ -217,21 +217,81 @@ kills or automatic restarts. Measured memory was about 75 MiB for Tetragon,
 41 MiB for Vector, and 102 MiB for Juice Shop. See
 [the local Desktop guide](docker-desktop.md) for reproducible commands.
 
-## Milestone 5: Collector event coverage and container attribution
+## Milestone 5: Security event coverage and searchable storage
 
-Make the pipeline able to process every event schema emitted by the collector without adding event-specific pipeline logic. Expand collector coverage incrementally, beginning with OOM victims and then file-access patterns.
+Collect process execution, sensitive-file access, and network connections through
+one shared Vector pipeline, then retain the events in a queryable datastore.
+OOM collection is removed from this milestone; the original OOM exercise remains
+available separately. See [the implementation plan](../plans/milestone-5-datastore-plan.md).
+The [datastore decision](datastore.md) selects local JSONL staging, Parquet batch
+conversion, and ingestion into native DuckDB tables. ClickHouse is the preferred
+next step if continuous ingestion or shared query serving is needed.
+
+**Core path verified on Docker Desktop, 2026-10-27; milestone in progress**
+
+1. Tetragon enabled both observation-only policies. A fresh Node.js probe
+   produced execution/exit, file-permission, and TCP-attempt records sharing an
+   execution ID and matching Juice Shop's Docker identity. Protected/control
+   paths and a non-Node negative probe behaved as configured.
+2. Vector's common envelope maps the two policy/hook combinations into file
+   and network categories, preserves original JSON, and retains optional null
+   context. Pinned-image validation and 11 transform tests passed; the existing
+   process acceptance check passed with bounded metric labels.
+3. All 11 fresh probe records (2 process, 8 file, 1 network) survived staging,
+   Parquet conversion, and native DuckDB with exact original-object equality.
+   The completed batch imported 591 records; retry inserted zero duplicates.
+   Reopened read-only queries and all four saved SQL investigations passed.
+4. Ten offline ingestion tests cover types, raw preservation, optional fields,
+   duplicates, malformed inputs, post-publication retry, and transactional
+   rollback. The Python dependency list includes `pytz` for timezone-aware
+   query results.
+5. An isolated pinned Vector test recovered unread records from a retained
+   rotated backup and new active file after restart without replaying the
+   checkpointed record. Counters retained their value after 65 idle seconds.
+6. Measured memory was about 97 MiB Tetragon, 44 MiB Vector, and 118 MiB Juice
+   Shop, within existing limits. The 591-record batch took about 115 ms to
+   convert/import; one execution-ID query took about 1 ms. These are small
+   local measurements, not sustained throughput or capacity evidence.
+
+The milestone remains open for retention/disk-budget cleanup and sustained-load/
+crash-recovery acceptance. Collector-driven rotation and full-disk behavior
+remain unverified; no automatic ingestion scheduler or expiry exists. The file
+scope is the Node.js protected probe prefix, and networking covers Node.js TCP
+attempts. IPv6, refused connections, broader executable coverage, and raw cgroup
+export remain unverified. See [the raw-event guide](security-events.md) and
+[storage evidence and limits](datastore-ingestion.md#verification-and-limits).
 
 **Success criteria**
 
 1. Process execution events identify the current Juice Shop demo workload.
-2. OOM events identify the victim process and, when available, the affected container.
-3. File-access events include the accessing process, target path, and available workload identity.
-4. Vector handles process execution, OOM, and file-access events through the same normalized event pipeline.
-5. The output includes cgroup identity and container identity when available.
+2. Sensitive-file observations include the accessing process, target path,
+   operation semantics, and available workload identity.
+3. Network observations initially cover outbound TCP connection attempts and
+   include process, destination IP/port, and available workload identity;
+   distinguish attempts from successful connections.
+4. Vector handles all three categories through shared normalization while
+   preserving the original event and event-specific payload.
+5. The output includes cgroup identity and container identity when available,
+   with missing metadata explicitly documented.
+6. Fresh events from all three categories pass through local JSONL staging,
+   Parquet conversion, and native DuckDB tables, queryable by time, workload,
+   and category. Verify persistence, bounded outage recovery, duplicate-safe
+   import, rollback, retention, and local resource use.
 
 **Future security coverage**
 
-Additional event types are intentionally TBD after OOM and file-access patterns are validated. Candidates include process exit, outbound connections, and privilege-related activity.
+Additional coverage is chosen after the three categories are validated.
+Candidates include inbound connections, UDP activity, and privilege-related
+events. Process exit remains part of the existing process lifecycle pipeline.
+UI, alert rules, and a custom API follow the initial DuckDB SQL query checks.
+
+An optional [local query dashboard](datastore-ui.md) was added alongside
+Milestone 5 on 2026-10-28 at the user's request. It runs DuckDB and Streamlit in
+its own container, reads Vector staging read-only, and imports complete-line
+snapshots on demand into a separate persistent volume. It supplies category/
+workload/time filters, charts, event inspection, and a bounded read-only SQL
+editor. The original host batch workflow remains available. This does not
+complete Milestone 5's outstanding retention and operational acceptance work.
 
 ## Milestone 6: Agent packaging
 
@@ -247,7 +307,9 @@ Package the agent as a dedicated Docker image and prepare a Kubernetes DaemonSet
 
 ### Platform-backed anomaly detection
 
-Evaluate a search and analytics platform, beginning with OpenSearch, for raw-event retention and statistical anomaly scoring.
+Evaluate platform-backed anomaly scoring when the local analytical workflow
+needs a shared service. Follow [the datastore decision](datastore.md); no
+platform-backed anomaly engine has been selected or validated.
 
 **Success criteria**
 

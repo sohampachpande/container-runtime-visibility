@@ -2,8 +2,8 @@ data_dir = "/var/lib/vector"
 
 [sources.tetragon]
 type = "file"
-include = ["/var/log/tetragon/tetragon.log"]
-read_from = "end"
+include = ["/var/log/tetragon/tetragon.log", "/var/log/tetragon/tetragon-*.log"]
+read_from = "beginning"
 
 [transforms.normalize]
 type = "remap"
@@ -13,27 +13,67 @@ drop_on_abort = true
 reroute_dropped = true
 source = '''
 raw = object!(parse_json!(.message))
-event_type = "unknown"
-payload = {}
-if exists(raw.process_exec) {
-  event_type = "process_exec"
-  payload = object!(raw.process_exec)
-} else if exists(raw.process_exit) {
-  event_type = "process_exit"
-  payload = object!(raw.process_exit)
-} else {
+payload_keys = filter(keys(raw)) -> |_index, key| {
+  !includes(["time", "node_name", "aggregation_info", "cluster_name", "node_labels"], key)
+}
+if length(payload_keys) != 1 {
   abort
 }
-process = object!(payload.process)
+event_type = string!(payload_keys[0])
+payload = object!(get!(raw, [event_type]))
+process = object(payload.process) ?? null
+category = "other"
+file = null
+network = null
+if includes(["process_exec", "process_exit"], event_type) {
+  category = "process"
+} else if event_type == "process_kprobe" {
+  args = array(payload.args) ?? []
+  if payload.policy_name == "runtime-sensitive-file" && payload.function_name == "security_file_permission" {
+    category = "file"
+    files = filter(args) -> |_index, arg| { exists(arg.file_arg) }
+    masks = filter(args) -> |_index, arg| { exists(arg.int_arg) }
+    file = {
+      "path": files[0].file_arg.path,
+      "permission_mask": masks[0].int_arg,
+      "permission_result": payload.return.int_arg
+    }
+  } else if payload.policy_name == "runtime-network-connect" && payload.function_name == "tcp_connect" {
+    category = "network"
+    sockets = filter(args) -> |_index, arg| { exists(arg.sock_arg) }
+    socket = sockets[0].sock_arg
+    network = {
+      "direction": "outbound",
+      "observation": "connect_attempt",
+      "family": socket.family,
+      "protocol": socket.protocol,
+      "source_ip": socket.saddr,
+      "source_port": socket.sport,
+      "destination_ip": socket.daddr,
+      "destination_port": socket.dport,
+      "state": socket.state
+    }
+  }
+}
+metric_event_type = "other"
+if includes(["process_exec", "process_exit", "process_kprobe", "process_tracepoint", "process_loader", "process_uprobe", "process_throttle", "process_lsm", "process_usdt", "test", "rate_limit_info"], event_type) {
+  metric_event_type = event_type
+}
 . = {
   "schema_version": 1,
   "collector": "tetragon",
   "timestamp": parse_timestamp!(string!(raw.time), format: "%+"),
   "event_type": event_type,
+  "metric_event_type": metric_event_type,
+  "category": category,
   "host": {"name": string!(raw.node_name)},
   "process": process,
   "parent": payload.parent,
   "container": {"id_prefix": process.docker},
+  "policy": payload.policy_name,
+  "hook": payload.function_name,
+  "file": file,
+  "network": network,
   "tetragon": raw
 }
 '''
@@ -48,7 +88,7 @@ field = "event_type"
 name = "runtime_events_total"
 
 [transforms.event_counter.metrics.tags]
-event_type = "{{ event_type }}"
+event_type = "{{ metric_event_type }}"
 host = "{{ host.name }}"
 
 [sinks.normalized]
@@ -63,11 +103,19 @@ inputs = ["normalize.dropped"]
 target = "stderr"
 encoding.codec = "json"
 
+[sinks.staging]
+type = "file"
+inputs = ["normalize"]
+path = "/var/lib/vector/staging/events-%Y-%m-%d.jsonl"
+timezone = "UTC"
+encoding.codec = "json"
+
 [sinks.metrics]
 type = "prometheus_exporter"
 inputs = ["event_counter"]
 address = "0.0.0.0:9598"
 suppress_timestamp = true
+flush_period_secs = 0
 
 [[tests]]
 name = "execution preserves process, parent, and original event"
@@ -84,6 +132,7 @@ type = "vrl"
 source = '''
 assert_eq!(.schema_version, 1)
 assert_eq!(.event_type, "process_exec")
+assert_eq!(.category, "process")
 assert_eq!(.process.pid, 123)
 assert_eq!(.parent.pid, 100)
 assert_eq!(.container.id_prefix, "abc123")
@@ -104,6 +153,7 @@ extract_from = "normalize"
 type = "vrl"
 source = '''
 assert_eq!(.event_type, "process_exit")
+assert_eq!(.category, "process")
 assert_eq!(.process.pid, 124)
 assert_eq!(.container.id_prefix, null)
 assert_eq!(.tetragon.process_exit.status, 7)
@@ -142,3 +192,124 @@ assert_eq!(.tags, {"event_type": "process_exec", "host": "test-host"})
 assert_eq!(.type, "counter")
 assert_eq!(.kind, "incremental")
 '''
+
+[[tests]]
+name = "file policy maps typed arguments independently of their positions"
+[[tests.inputs]]
+insert_at = "normalize"
+type = "log"
+log_fields.message = '{"time":"2026-10-28T04:27:26.632192301Z","node_name":"test-host","process_kprobe":{"process":{"pid":123,"exec_id":"probe-id","docker":"abc123"},"policy_name":"runtime-sensitive-file","function_name":"security_file_permission","args":[{"int_arg":4},{"file_arg":{"path":"/tmp/runtime-visibility-sensitive-example/credentials.txt","permission":"-rw-------"}}],"return":{"int_arg":0}}}'
+[[tests.outputs]]
+extract_from = "normalize"
+[[tests.outputs.conditions]]
+type = "vrl"
+source = '''
+assert_eq!(.event_type, "process_kprobe")
+assert_eq!(.category, "file")
+assert_eq!(.policy, "runtime-sensitive-file")
+assert_eq!(.hook, "security_file_permission")
+assert_eq!(.file, {"path": "/tmp/runtime-visibility-sensitive-example/credentials.txt", "permission_mask": 4, "permission_result": 0})
+assert_eq!(.network, null)
+assert_eq!(.process.exec_id, "probe-id")
+assert_eq!(.tetragon, {"time": "2026-10-28T04:27:26.632192301Z", "node_name": "test-host", "process_kprobe": {"process": {"pid": 123, "exec_id": "probe-id", "docker": "abc123"}, "policy_name": "runtime-sensitive-file", "function_name": "security_file_permission", "args": [{"int_arg": 4}, {"file_arg": {"path": "/tmp/runtime-visibility-sensitive-example/credentials.txt", "permission": "-rw-------"}}], "return": {"int_arg": 0}}})
+'''
+
+[[tests]]
+name = "TCP policy preserves socket endpoint and attempt semantics"
+[[tests.inputs]]
+insert_at = "normalize"
+type = "log"
+log_fields.message = '{"time":"2026-10-28T04:27:26Z","node_name":"test-host","process_kprobe":{"policy_name":"runtime-network-connect","function_name":"tcp_connect","args":[{"sock_arg":{"family":"AF_INET","protocol":"IPPROTO_TCP","saddr":"127.0.0.1","sport":58198,"daddr":"127.0.0.1","dport":38611,"state":"TCP_SYN_SENT"}}]}}'
+[[tests.outputs]]
+extract_from = "normalize"
+[[tests.outputs.conditions]]
+type = "vrl"
+source = '''
+assert_eq!(.category, "network")
+assert_eq!(.network, {"direction": "outbound", "observation": "connect_attempt", "family": "AF_INET", "protocol": "IPPROTO_TCP", "source_ip": "127.0.0.1", "source_port": 58198, "destination_ip": "127.0.0.1", "destination_port": 38611, "state": "TCP_SYN_SENT"})
+assert_eq!(.process, null)
+assert_eq!(.parent, null)
+assert_eq!(.container.id_prefix, null)
+assert_eq!(.file, null)
+'''
+
+[[tests]]
+name = "unknown policy remains other and preserves its payload"
+[[tests.inputs]]
+insert_at = "normalize"
+type = "log"
+log_fields.message = '{"time":"2026-10-28T04:27:26Z","node_name":"test-host","process_kprobe":{"policy_name":"unrecognized","function_name":"tcp_connect","args":[{"sock_arg":{"dport":443}}]}}'
+[[tests.outputs]]
+extract_from = "normalize"
+[[tests.outputs.conditions]]
+type = "vrl"
+source = '''
+assert_eq!(.category, "other")
+assert_eq!(.network, null)
+assert_eq!(.tetragon.process_kprobe.args[0].sock_arg.dport, 443)
+'''
+
+[[tests]]
+name = "future event retains original data and a bounded metric label"
+[[tests.inputs]]
+insert_at = "normalize"
+type = "log"
+log_fields.message = '{"time":"2026-10-28T04:27:26Z","node_name":"test-host","cluster_name":"lab","node_labels":{"role":"test"},"future_event":{"value":42}}'
+[[tests.outputs]]
+extract_from = "normalize"
+[[tests.outputs.conditions]]
+type = "vrl"
+source = '''
+assert_eq!(.event_type, "future_event")
+assert_eq!(.category, "other")
+assert_eq!(.metric_event_type, "other")
+assert_eq!(.tetragon.future_event.value, 42)
+assert_eq!(.process, null)
+'''
+[[tests.outputs]]
+extract_from = "event_counter"
+[[tests.outputs.conditions]]
+type = "vrl"
+source = 'assert_eq!(.tags, {"event_type": "other", "host": "test-host"})'
+
+[[tests]]
+name = "missing typed arguments remain null without dropping the original"
+[[tests.inputs]]
+insert_at = "normalize"
+type = "log"
+log_fields.message = '{"time":"2026-10-28T04:27:26Z","node_name":"test-host","process_kprobe":{"policy_name":"runtime-sensitive-file","function_name":"security_file_permission"}}'
+[[tests.outputs]]
+extract_from = "normalize"
+[[tests.outputs.conditions]]
+type = "vrl"
+source = '''
+assert_eq!(.category, "file")
+assert_eq!(.file, {"path": null, "permission_mask": null, "permission_result": null})
+assert_eq!(.tetragon.process_kprobe.policy_name, "runtime-sensitive-file")
+'''
+
+[[tests]]
+name = "ambiguous payloads are rejected"
+no_outputs_from = ["normalize", "event_counter"]
+[[tests.inputs]]
+insert_at = "normalize"
+type = "log"
+log_fields.message = '{"time":"2026-10-28T04:27:26Z","node_name":"test-host","process_exec":{},"process_exit":{}}'
+[[tests.outputs]]
+extract_from = "normalize.dropped"
+[[tests.outputs.conditions]]
+type = "vrl"
+source = 'assert!(contains(string!(.message), "process_exit"))'
+
+[[tests]]
+name = "missing event timestamp is rejected"
+no_outputs_from = ["normalize", "event_counter"]
+[[tests.inputs]]
+insert_at = "normalize"
+type = "log"
+log_fields.message = '{"node_name":"test-host","process_exec":{}}'
+[[tests.outputs]]
+extract_from = "normalize.dropped"
+[[tests.outputs.conditions]]
+type = "vrl"
+source = 'assert!(contains(string!(.message), "process_exec"))'

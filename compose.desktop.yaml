@@ -9,6 +9,12 @@ services:
         read_only: true
         bind:
           create_host_path: false
+      - type: bind
+        source: ./collector/tetragon/policies
+        target: /etc/tetragon/policies
+        read_only: true
+        bind:
+          create_host_path: false
       - tetragon-logs:/var/log/tetragon
 
   vector:

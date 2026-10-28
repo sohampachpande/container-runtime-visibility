@@ -99,8 +99,11 @@ Kernel reaches selected hook
 The default policy action is `Post`, which emits an event. Policies can also
 perform enforcement, but this project remains observation-only. Despite their
 Kubernetes-style YAML, policies can be loaded on the standalone VM through
-`tetra` or startup policy files. No custom policies have been loaded for our
-current demo. See [tracing policies](https://tetragon.io/docs/concepts/tracing-policy/)
+`tetra` or startup policy files. The earlier verified deployment used no custom
+policies. Milestone 5 now adds startup
+file/network policies under `collector/tetragon/policies/`; loading and live
+events are pending verification. See [the raw-event guide](security-events.md),
+[tracing policies](https://tetragon.io/docs/concepts/tracing-policy/)
 and [selectors](https://tetragon.io/docs/concepts/tracing-policy/selectors/).
 
 | Coverage | Possible observations | What to validate |

@@ -28,6 +28,19 @@ Open [Juice Shop](http://localhost:3000). Vector exposes event counters at
 its container logs. Tetragon and Vector share raw events through a Docker
 named volume. The collector observes the Linux VM kernel, not macOS.
 
+For charts, event inspection, and a read-only SQL editor, start the optional
+[DuckDB dashboard](docs/datastore-ui.md) in its own container:
+
+```sh
+docker compose -p runtime-visibility-desktop \
+  -f compose.yaml -f compose.desktop.yaml --profile ui \
+  up --detach --build datastore-ui
+```
+
+Open [the dashboard](http://127.0.0.1:8501) and choose **Import latest**.
+It reads Vector's staging volume without stopping the pipeline, then stores
+snapshots, Parquet, and its database on a separate persistent volume.
+
 ## Original OOM exercise
 
 The Python workload in `test-app/` remains available separately through

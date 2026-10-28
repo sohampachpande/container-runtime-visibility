@@ -3,11 +3,13 @@
 
 import argparse
 import datetime
+import hashlib
 import json
 import re
 import subprocess
 import time
 import urllib.request
+import uuid
 
 
 def docker(*args):
@@ -53,10 +55,24 @@ else:
 
 started = datetime.datetime.now(datetime.timezone.utc).isoformat()
 container = json.loads(docker('inspect', juice_id))[0]
-marker = 'compose_pipeline_probe'
+marker = f'compose_pipeline_probe_{uuid.uuid4().hex}'
 expected_raw = {}
-raw_path = '/var/log/tetragon/tetragon.log'
-offset = int(docker('exec', tetragon_id, 'wc', '-c', raw_path).split()[0])
+
+
+def raw_events():
+    output = docker('exec', tetragon_id, 'sh', '-c',
+                    'for capture in /var/log/tetragon/tetragon.log /var/log/tetragon/tetragon-*.log; '
+                    'do if [ -f "$capture" ]; then cat "$capture"; fi; done')
+    for line in output.splitlines():
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        yield hashlib.sha256(line.encode()).hexdigest(), event
+
+
+# Compare retained records rather than reusing a byte offset after rotation.
+seen_raw = {fingerprint for fingerprint, event in raw_events()}
 if args.desktop:
     host = subprocess.Popen([
         'docker', 'run', '--rm', '--privileged', '--pid=host', '--uts=host',
@@ -72,12 +88,10 @@ docker('exec', '--detach', juice_id, '/nodejs/bin/node', '-e',
 assert host.wait(timeout=10) == 0
 deadline = time.monotonic() + 15
 while time.monotonic() < deadline:
-    lines = docker('exec', tetragon_id, 'tail', '-c', f'+{offset + 1}', raw_path).splitlines()
-    for line in lines:
-        try:
-            event = json.loads(line)
-        except json.JSONDecodeError:
+    for fingerprint, event in raw_events():
+        if fingerprint in seen_raw:
             continue
+        seen_raw.add(fingerprint)
         for event_type, payload in event.items():
             if event_type not in ('process_exec', 'process_exit'):
                 continue
