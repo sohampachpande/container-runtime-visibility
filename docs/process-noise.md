@@ -60,6 +60,35 @@ a configuration warning when its selection is missing/invalid. The acceptance
 script checks the live container ID against Vector's configuration before
 generating probes. There is no automatic Docker discovery/watch service.
 
+## Known assumption: manually maintained container identity
+
+The current lab assumes one selected Juice Shop container and an operator who
+refreshes its ID whenever the container is recreated. A container ID identifies
+one container instance; it is not a stable workload identity. Replicas and
+replacement containers are not discovered automatically.
+
+**Failure mode:** the saved ID can remain syntactically valid after replacement.
+Vector then excludes the replacement's execution/exit records from normalized
+output, staging, and metrics. The dashboard's missing/invalid-ID warning does
+not detect this stale-but-valid selection, so old data can still appear under
+the monitored-workload label while new process telemetry is absent. Raw
+Tetragon collection continues, subject to its existing log retention.
+
+The acceptance script detects a mismatch when explicitly run, but it is not a
+continuous freshness check. This manual setup is a lab limitation, not a
+production workload-selection design.
+
+**Required follow-up:** select a stable workload identity, such as Compose
+project/service labels, and automatically resolve and refresh its current
+container IDs. Support replacement and multiple matching instances. Reliable
+Docker metadata discovery/enrichment and its access permissions still need a
+design; neither Vector nor the UI currently has Docker socket access.
+
+Make missing or stale discovery visibly unhealthy, and verify recreation and
+replica coverage with fresh execution/exit probes before claiming automatic
+workload monitoring. This is pending work, not implemented behavior. The
+Node-only file/network policies remain a separate coverage limitation.
+
 ## Dashboard behavior
 
 - Explore defaults to **Juice Shop (monitored)**, with the selected ID prefix

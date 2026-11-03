@@ -168,3 +168,9 @@ host-wide logs, file/network routing, original records, and historical storage.
 Refresh the configured container ID after application recreation; automatic
 workload discovery is not introduced. This does not change the outstanding
 retention/load/crash acceptance gates.
+
+Required follow-up: replace manually maintained instance IDs with stable
+workload selection and automatic discovery of replacement/replica IDs. Surface
+missing or stale discovery as unhealthy, and validate recreation/replica
+coverage with fresh probes. The current acceptance script is a manual check,
+not continuous discovery. See [the documented assumption and failure mode](../docs/process-noise.md#known-assumption-manually-maintained-container-identity).

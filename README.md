@@ -1,91 +1,72 @@
 # Container Runtime Visibility
 
-An eBPF-assisted Linux runtime-security lab. Tetragon observes host and
-container process activity, with OWASP Juice Shop as the security demo workload.
+## Motivation / Goal
 
-## First milestone: diagnose an OOM kill
+Build a runtime visibility agent and pipeline to monitor agentic workflows at
+the Linux kernel level: which processes they launch, which sensitive files they
+access, and where they attempt to connect.
 
-The demo service intentionally allocates memory until Docker's cgroup memory limit kills it. The investigation connects three signals:
+The motivation came from the [Hugging Face incident](https://openai.com/index/hugging-face-incident-and-the-road-ahead/),
+in which agents repurposed JFrog Artifactory as an unauthorized message board
+to communicate and coordinate. It raised a practical question: how can we
+observe the system activity behind an agent's actions?
 
-1. Docker reports the container's memory limit and exit status.
-2. The application logs its allocation progress before it exits.
-3. A later eBPF collector will observe the kernel OOM event and attribute it to the container cgroup.
+This project builds on my experience with OpenTelemetry (OTel), adding kernel
+and container telemetry as another source of visibility. The longer-term goal
+is to connect that activity to agent runs and tool calls. That correlation is
+future work; the current lab uses OWASP Juice Shop as its demo workload.
 
-## Run locally with Docker Desktop
+## What We Built
 
-Run Tetragon, Vector, and OWASP Juice Shop as separate containers using
-Docker Desktop's Linux VM kernel. Follow [the local development guide](docs/docker-desktop.md)
-for prerequisites, validation, logs, and shutdown commands.
-
-```sh
-docker compose -p runtime-visibility-desktop \
-  -f compose.yaml -f compose.desktop.yaml up --detach tetragon juice-shop
-python3 scripts/select-workload.py --desktop
-docker compose -p runtime-visibility-desktop \
-  -f compose.yaml -f compose.desktop.yaml up --detach
-python3 scripts/verify-pipeline.py --desktop
+```text
+Docker Desktop's Linux VM
+  │
+  Tetragon ── raw JSON logs ──► Vector
+                                 │
+                         normalized JSONL
+                         shared Docker volume
+                                 │ read-only mount
+                                 ▼
+                        datastore-ui container
+                         "Import latest" button
+                                 │
+                      snapshot → Parquet → DuckDB
+                                              │
+                                       Streamlit UI / SQL
 ```
 
-Open [Juice Shop](http://localhost:3000). Vector exposes event counters at
-[localhost:9598/metrics](http://localhost:9598/metrics) and normalized JSON in
-its container logs. Tetragon and Vector share raw events through a Docker
-named volume. The collector observes the Linux VM kernel, not macOS.
-Normalized process telemetry is scoped to Juice Shop; raw Tetragon collection
-remains host-wide. [Refresh the workload selection](docs/process-noise.md) after
-recreating Juice Shop. No Docker socket is mounted into Vector or the UI.
+1. **Kernel collection:** Tetragon observes process execution/exit,
+   sensitive-file permission checks, and outbound TCP connection attempts.
+2. **Event pipeline:** Vector normalizes events into a shared schema, preserves
+   original payloads, filters process events to the selected workload, and
+   exposes counters with bounded metric labels.
+3. **Local storage:** completed JSONL snapshots become compressed Parquet and
+   native DuckDB tables. Validation runs in bounded batches; repeated imports
+   do not duplicate database records.
+4. **Investigation UI:** a separate container owns DuckDB and provides filters,
+   charts, original-event inspection, grouped process lifecycles, and a
+   read-only SQL editor.
 
-For charts, event inspection, and a read-only SQL editor, start the optional
-[DuckDB dashboard](docs/datastore-ui.md) in its own container:
+## Status
 
-```sh
-docker compose -p runtime-visibility-desktop \
-  -f compose.yaml -f compose.desktop.yaml --profile ui \
-  up --detach --build datastore-ui
-```
+**Milestone 4 is complete. Milestone 5's core pipeline works; operational
+acceptance remains in progress.** See [milestones and verified evidence](docs/milestone.md).
 
-Open [the dashboard](http://127.0.0.1:8501) and choose **Import latest**.
-It reads Vector's staging volume without stopping the pipeline, then stores
-snapshots, Parquet, and its database on a separate persistent volume.
+| Area | Current state |
+| --- | --- |
+| End-to-end pipeline | All three event categories verified through Tetragon, Vector, Parquet, DuckDB, and the dashboard on Docker Desktop. |
+| Collection coverage | File/network policies target `/nodejs/bin/node`; file paths must start with `/tmp/runtime-visibility-sensitive-`. File checks and TCP attempts do not prove completed reads or successful connections. |
+| Workload selection | Process filtering uses a manually selected container ID. Recreation requires refreshing it; stale IDs can silently exclude new process events. [Assumption and follow-up](docs/process-noise.md#known-assumption-manually-maintained-container-identity). |
+| Operational work | Imports are manual. Automatic workload discovery, retention/disk budgets, sustained-load testing, and crash/full-disk recovery remain pending. |
+| Agent integration | Agent-run/OTel correlation, detections, alerts, and an application API are future work. Collection is observation-only. |
 
-## Original OOM exercise
+**Try the lab:** [Docker Desktop setup](docs/docker-desktop.md) ·
+[Dashboard and SQL](docs/datastore-ui.md) ·
+[Datastore design](docs/datastore.md).
 
-The Python workload in `test-app/` remains available separately through
-`compose.oom.yaml`:
+## Copyright
 
-```sh
-docker compose -f compose.oom.yaml up --build --detach
-curl http://localhost:8080/healthz
-curl 'http://localhost:8080/allocate?mb=1024'
-```
+Copyright 2026 Soham Pachpande. All rights reserved.
 
-Its 64 MiB limit and diagnostic steps are documented in
-[the Docker OOM workflow](docs/debugging-workflow.md). Stop Juice Shop before
-running the OOM exercise if memory is constrained.
-
-## Linux host requirement
-
-The eBPF milestone needs a Linux kernel with BTF support and permission to load
-tracing programs. `bpftool` is an optional diagnostic aid. Docker Desktop on
-macOS runs its own Linux VM. The GCP Linux deployment and the local
-[Docker Desktop deployment](docs/docker-desktop.md) are both verified; neither
-collects events from the macOS kernel.
-
-## Debugging workflow
-
-The earlier [GCP VM setup](archive/README.md) is archived.
-
-Follow [the Docker OOM debugging workflow](docs/debugging-workflow.md) to reproduce the incident and diagnose it with application logs and Docker container state.
-
-## Collector and pipeline status
-
-Tetragon process execution and Docker container identity are verified on
-Docker Desktop. See [the collector guide](docs/tetragon.md). Raw cgroup enrichment is
-deferred, and additional event coverage follows incrementally.
-
-Milestone 4's [Vector pipeline](docs/vector.md) reads Tetragon JSON, normalizes
-process events, and exposes a low-cardinality event counter. File ingestion,
-normalization, and counter labels are verified on Docker Desktop; a Prometheus rate
-query remains unverified.
-
-The root Compose definition is the lab entry point; all three containers and
-the combined Linux pipeline have passed live validation.
+No license is granted for reuse of this project's original code or documentation.
+Third-party components retain their respective licenses.
