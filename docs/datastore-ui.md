@@ -27,16 +27,16 @@ DuckDB file between independent writers/readers would need different ownership.
 ## Start on Docker Desktop
 
 Run from the repository root. The `ui` profile keeps the extra service optional;
-ordinary Compose startup still starts the three telemetry/demo services.
+ordinary Compose startup starts the telemetry services; add `compose.demo.yaml` for Juice Shop.
 
 ```sh
 docker compose -p runtime-visibility-desktop \
-  -f compose.yaml -f compose.desktop.yaml up --detach tetragon juice-shop
+  -f compose.yaml -f compose.desktop.yaml -f compose.demo.yaml up --detach tetragon juice-shop
 python3 scripts/select-workload.py --desktop
 docker compose -p runtime-visibility-desktop \
-  -f compose.yaml -f compose.desktop.yaml --profile ui config --quiet
+  -f compose.yaml -f compose.desktop.yaml -f compose.demo.yaml --profile ui config --quiet
 docker compose -p runtime-visibility-desktop \
-  -f compose.yaml -f compose.desktop.yaml --profile ui \
+  -f compose.yaml -f compose.desktop.yaml -f compose.demo.yaml --profile ui \
   up --detach --build datastore-ui
 ```
 
@@ -46,7 +46,7 @@ new controlled activity first, run:
 
 ```sh
 docker compose -p runtime-visibility-desktop \
-  -f compose.yaml -f compose.desktop.yaml exec -T juice-shop \
+  -f compose.yaml -f compose.desktop.yaml -f compose.demo.yaml exec -T juice-shop \
   /nodejs/bin/node < scripts/probe-security-events.js
 ```
 
@@ -58,7 +58,7 @@ Process arguments, file paths, and original events can contain sensitive data.
 
 - **Import latest** adds new records, preserving the existing importer’s
   event-ID deduplication. Repeated inputs do not duplicate native table rows.
-- **Explore** defaults to Juice Shop and filters by time window, security
+- **Explore** defaults to the selected workload and filters by time window, security
   category, and workload. Time windows are relative to the latest imported
   event for the selected workload, so old captures stay
   useful. All displayed times are UTC. A Docker prefix is not a full ID or cgroup.
@@ -133,7 +133,7 @@ it on the small GCP VM. No cloud resource size is changed.
 
 ```sh
 docker compose -p runtime-visibility-desktop \
-  -f compose.yaml -f compose.desktop.yaml --profile ui stop datastore-ui
+  -f compose.yaml -f compose.desktop.yaml -f compose.demo.yaml --profile ui stop datastore-ui
 ```
 
 Stopping or recreating the container preserves `datastore-data`. Do not use

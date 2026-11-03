@@ -22,7 +22,7 @@ services:
         bind:
           create_host_path: false
       - type: bind
-        source: ./collector/tetragon/policies
+        source: ${TETRAGON_POLICY_DIR:-./collector/tetragon/policies}
         target: /etc/tetragon/policies
         read_only: true
         bind:
@@ -94,17 +94,6 @@ services:
       - datastore-data:/data
     ports:
       - "127.0.0.1:8501:8501"
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
-
-  juice-shop:
-    image: bkimminich/juice-shop:v20.3.0
-    ports:
-      - "127.0.0.1:3000:3000"
-    mem_limit: 384m
     logging:
       driver: json-file
       options:

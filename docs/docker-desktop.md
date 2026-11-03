@@ -1,8 +1,8 @@
 # Local Docker Desktop lab
 
-Docker Desktop is the default environment for ongoing development on
-`m5/datastore`. Always combine `compose.yaml` and `compose.desktop.yaml` with
-project name `runtime-visibility-desktop`, as shown below. The GCP VM remains
+Docker Desktop is the default environment for ongoing development. Combine
+`compose.yaml`, `compose.desktop.yaml`, and `compose.demo.yaml` for the demo
+with project name `runtime-visibility-desktop`, as shown below. The GCP VM remains
 available for native Linux validation.
 
 ## What is observed
@@ -45,20 +45,20 @@ Desktop daemon before starting the lab:
 docker context show
 docker info --format 'Kernel={{.KernelVersion}} Arch={{.Architecture}}'
 docker compose -p runtime-visibility-desktop \
-  -f compose.yaml -f compose.desktop.yaml config --quiet
+  -f compose.yaml -f compose.desktop.yaml -f compose.demo.yaml config --quiet
 docker compose -p runtime-visibility-desktop \
-  -f compose.yaml -f compose.desktop.yaml pull
+  -f compose.yaml -f compose.desktop.yaml -f compose.demo.yaml pull
 docker compose -p runtime-visibility-desktop \
-  -f compose.yaml -f compose.desktop.yaml run --rm --no-deps vector \
+  -f compose.yaml -f compose.desktop.yaml -f compose.demo.yaml run --rm --no-deps vector \
   validate --no-environment /etc/vector/vector.toml
 docker compose -p runtime-visibility-desktop \
-  -f compose.yaml -f compose.desktop.yaml run --rm --no-deps vector \
+  -f compose.yaml -f compose.desktop.yaml -f compose.demo.yaml run --rm --no-deps vector \
   test /etc/vector/vector.toml
 docker compose -p runtime-visibility-desktop \
-  -f compose.yaml -f compose.desktop.yaml up --detach tetragon juice-shop
+  -f compose.yaml -f compose.desktop.yaml -f compose.demo.yaml up --detach tetragon juice-shop
 python3 scripts/select-workload.py --desktop
 docker compose -p runtime-visibility-desktop \
-  -f compose.yaml -f compose.desktop.yaml up --detach
+  -f compose.yaml -f compose.desktop.yaml -f compose.demo.yaml up --detach
 ```
 
 No manual host log-directory or checkpoint-volume setup is needed for this
@@ -109,16 +109,16 @@ datastore volume. Include `--profile ui` when managing the full stack with it.
 
 ```sh
 docker compose -p runtime-visibility-desktop \
-  -f compose.yaml -f compose.desktop.yaml logs --follow vector
+  -f compose.yaml -f compose.desktop.yaml -f compose.demo.yaml logs --follow vector
 docker compose -p runtime-visibility-desktop \
-  -f compose.yaml -f compose.desktop.yaml exec -T tetragon \
+  -f compose.yaml -f compose.desktop.yaml -f compose.demo.yaml exec -T tetragon \
   tail -f /var/log/tetragon/tetragon.log
 curl --fail http://127.0.0.1:9598/metrics
 curl --fail --silent --output /dev/null http://127.0.0.1:3000/
 docker compose -p runtime-visibility-desktop \
-  -f compose.yaml -f compose.desktop.yaml stats --no-stream
+  -f compose.yaml -f compose.desktop.yaml -f compose.demo.yaml stats --no-stream
 docker compose -p runtime-visibility-desktop \
-  -f compose.yaml -f compose.desktop.yaml down
+  -f compose.yaml -f compose.desktop.yaml -f compose.demo.yaml down
 ```
 
 Press Ctrl-C to stop following logs before continuing. Teardown without `-v`

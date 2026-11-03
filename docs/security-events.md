@@ -108,13 +108,13 @@ observation gap; it does not remove the existing event/checkpoint volumes.
 
 ```sh
 docker compose -p runtime-visibility-desktop \
-  -f compose.yaml -f compose.desktop.yaml config --quiet
+  -f compose.yaml -f compose.desktop.yaml -f compose.demo.yaml config --quiet
 docker compose -p runtime-visibility-desktop \
-  -f compose.yaml -f compose.desktop.yaml up --detach tetragon juice-shop
+  -f compose.yaml -f compose.desktop.yaml -f compose.demo.yaml up --detach tetragon juice-shop
 docker compose -p runtime-visibility-desktop \
-  -f compose.yaml -f compose.desktop.yaml logs --tail 150 tetragon
+  -f compose.yaml -f compose.desktop.yaml -f compose.demo.yaml logs --tail 150 tetragon
 docker compose -p runtime-visibility-desktop \
-  -f compose.yaml -f compose.desktop.yaml exec -T tetragon tetra \
+  -f compose.yaml -f compose.desktop.yaml -f compose.demo.yaml exec -T tetragon tetra \
   --server-address unix:///var/run/tetragon/tetragon.sock tracingpolicy list
 ```
 
@@ -134,7 +134,7 @@ window, so keep the capture local and treat it as sensitive.
 m5_capture=$(mktemp /tmp/runtime-visibility-m5.XXXXXX)
 printf 'Raw capture: %s\n' "$m5_capture"
 docker compose -p runtime-visibility-desktop \
-  -f compose.yaml -f compose.desktop.yaml exec -T tetragon \
+  -f compose.yaml -f compose.desktop.yaml -f compose.demo.yaml exec -T tetragon \
   tail -n 0 -F /var/log/tetragon/tetragon.log > "$m5_capture"
 ```
 
@@ -152,7 +152,7 @@ the expected paths and endpoint, and removes its temporary directories.
 
 ```sh
 docker compose -p runtime-visibility-desktop \
-  -f compose.yaml -f compose.desktop.yaml exec -T juice-shop \
+  -f compose.yaml -f compose.desktop.yaml -f compose.demo.yaml exec -T juice-shop \
   /nodejs/bin/node < scripts/probe-security-events.js
 ```
 

@@ -34,7 +34,7 @@ class DashboardTests(unittest.TestCase):
                 self.assertEqual(len(app.exception), 0)
                 self.assertEqual([metric.value for metric in app.metric], ['1', '1', '1', '0'])
                 workload = next(select for select in app.selectbox if select.label == 'Workload')
-                self.assertEqual(workload.value, 'Juice Shop (monitored)')
+                self.assertEqual(workload.value, 'Selected workload')
                 workload.set_value('All workloads').run()
                 self.assertEqual([metric.value for metric in app.metric], ['2', '1', '1', '0'])
                 app.radio[0].set_value('SQL').run()

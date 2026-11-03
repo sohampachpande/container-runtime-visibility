@@ -101,7 +101,7 @@ or crash/power-loss recovery.
 
 ## Validate and run with Compose
 
-The root `compose.yaml` contains Vector alongside Tetragon and Juice Shop.
+The root `compose.yaml` contains Vector alongside Tetragon; `compose.demo.yaml` adds Juice Shop.
 For development, combine it with `compose.desktop.yaml`. Follow
 [the Docker Desktop guide](docker-desktop.md) for configuration validation,
 the Vector tests, startup, logs, and shutdown commands.

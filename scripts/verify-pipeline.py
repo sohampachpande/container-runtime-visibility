@@ -19,9 +19,9 @@ def docker(*args):
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--desktop', action='store_true', help='Test Docker Desktop Linux VM using compose.desktop.yaml')
 args = parser.parse_args()
-compose = ['compose']
+compose = ['compose', '-f', 'compose.yaml', '-f', 'compose.demo.yaml']
 if args.desktop:
-    compose += ['-p', 'runtime-visibility-desktop', '-f', 'compose.yaml', '-f', 'compose.desktop.yaml']
+    compose = ['compose', '-p', 'runtime-visibility-desktop', '-f', 'compose.yaml', '-f', 'compose.desktop.yaml', '-f', 'compose.demo.yaml']
 
 vector_id = docker(*compose, 'ps', '--quiet', 'vector').strip()
 juice_id = docker(*compose, 'ps', '--quiet', 'juice-shop').strip()

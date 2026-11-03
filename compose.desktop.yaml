@@ -10,7 +10,7 @@ services:
         bind:
           create_host_path: false
       - type: bind
-        source: ./collector/tetragon/policies
+        source: ${TETRAGON_POLICY_DIR:-./collector/tetragon/policies}
         target: /etc/tetragon/policies
         read_only: true
         bind:

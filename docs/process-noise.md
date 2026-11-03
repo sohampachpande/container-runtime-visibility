@@ -5,8 +5,8 @@ hour contained 720 dashboard records and 582 Linux VM/runtime records, with
 none from Juice Shop. The dashboard's Docker health check launches shell/Python
 processes every 30 seconds, with additional runtime activity around each check.
 
-The pipeline now retains process lifecycle events only for the selected Juice
-Shop container. This is a workload boundary, not a binary allowlist: shells,
+The pipeline now retains process lifecycle events only for the selected
+container. This is a workload boundary, not a binary allowlist: shells,
 Python, tools launched by Node, and `docker exec` processes remain eligible when
 their exported Docker identity matches that container.
 
@@ -34,10 +34,10 @@ gets access to the Docker socket.
 
 ```sh
 docker compose -p runtime-visibility-desktop \
-  -f compose.yaml -f compose.desktop.yaml up --detach tetragon juice-shop
+  -f compose.yaml -f compose.desktop.yaml -f compose.demo.yaml up --detach tetragon juice-shop
 python3 scripts/select-workload.py --desktop
 docker compose -p runtime-visibility-desktop \
-  -f compose.yaml -f compose.desktop.yaml --profile ui \
+  -f compose.yaml -f compose.desktop.yaml -f compose.demo.yaml --profile ui \
   up --detach --build vector datastore-ui
 ```
 
@@ -62,7 +62,7 @@ generating probes. There is no automatic Docker discovery/watch service.
 
 ## Known assumption: manually maintained container identity
 
-The current lab assumes one selected Juice Shop container and an operator who
+The current lab assumes one selected container and an operator who
 refreshes its ID whenever the container is recreated. A container ID identifies
 one container instance; it is not a stable workload identity. Replicas and
 replacement containers are not discovered automatically.
@@ -91,7 +91,7 @@ Node-only file/network policies remain a separate coverage limitation.
 
 ## Dashboard behavior
 
-- Explore defaults to **Juice Shop (monitored)**, with the selected ID prefix
+- Explore defaults to **Selected workload**, with the selected ID prefix
   visible. **All workloads** and individual historical prefixes remain available.
   SQL always queries the complete imported database independently of Explore.
 - Time windows use the latest imported event for the selected workload, keeping
