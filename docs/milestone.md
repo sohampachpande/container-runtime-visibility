@@ -10,12 +10,12 @@ The demo Python service runs in a container with a 64 MiB memory limit. A 1 GiB 
 - Docker reports OOMKilled=true and exit code 137.
 - Docker reports an applied memory limit of 64 MiB.
 
-See [the debugging workflow](debugging-workflow.md).
+See [the debugging workflow](../archive/oom/debugging-workflow.md).
 
 ## Milestone 2: Linux test environments
 
 The project was cloned to a Raspberry Pi 5, where Docker Compose reproduced and
-diagnosed the memory-constrained OOM kill. See [the Raspberry Pi setup](linux-host-setup.md).
+diagnosed the memory-constrained OOM kill. See [the Raspberry Pi setup](../archive/oom/linux-host-setup.md).
 
 **Raspberry Pi status**
 
@@ -93,7 +93,7 @@ identity, but still does not export a raw cgroup field.
 
 **Docker attribution probe — verified on 2026-10-25**
 
-1. Built the Python Dockerfile (now `test-app/Dockerfile`, originally
+1. Built the Python Dockerfile (now `archive/oom/test-app/Dockerfile`, originally
    `demo-app/Dockerfile`) as `runtime-visibility-demo-app:m3`
    and started `demo-app-m3` with a 64 MiB limit and port 8080 bound to loopback.
    Docker Compose is unavailable on this VM, so the test used Docker directly.
@@ -115,7 +115,7 @@ identity, but still does not export a raw cgroup field.
 
 1. The default `compose.yaml` now selects `bkimminich/juice-shop:v20.3.0`,
    loopback port 3000, and a 384 MiB memory limit. The Python exercise remains
-   available separately through `compose.oom.yaml` with its 64 MiB limit.
+   available separately through `archive/oom/compose.yaml` with its 64 MiB limit.
 2. On the VM, stopped `demo-app-m3` and started `juice-shop-m3` using equivalent
    Docker CLI settings because Compose is not installed. HTTP `/` responded
    successfully, `OOMKilled=false`, and measured container memory was about

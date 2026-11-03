@@ -91,15 +91,15 @@ raw Tetragon logs. See [workload selection](process-noise.md).
 
 ```sh
 docker compose -p runtime-visibility-desktop \
-  -f compose.yaml -f compose.desktop.yaml run --rm --no-deps vector \
+  -f compose.yaml -f compose.desktop.yaml -f compose.demo.yaml run --rm --no-deps vector \
   validate --no-environment /etc/vector/vector.toml
 docker compose -p runtime-visibility-desktop \
   -f compose.yaml -f compose.desktop.yaml run --rm --no-deps vector \
   test /etc/vector/vector.toml
 docker compose -p runtime-visibility-desktop \
-  -f compose.yaml -f compose.desktop.yaml up --detach vector
+  -f compose.yaml -f compose.desktop.yaml -f compose.demo.yaml up --detach vector
 docker compose -p runtime-visibility-desktop \
-  -f compose.yaml -f compose.desktop.yaml restart vector
+  -f compose.yaml -f compose.desktop.yaml -f compose.demo.yaml restart vector
 python3 scripts/verify-pipeline.py --desktop
 ```
 
@@ -121,9 +121,9 @@ under sustained load remains unverified. No volumes are removed.
 datastore_data=$(mktemp -d /tmp/runtime-visibility-data.XXXXXX)
 printf 'Local data directory: %s\n' "$datastore_data"
 docker compose -p runtime-visibility-desktop \
-  -f compose.yaml -f compose.desktop.yaml stop --timeout 30 vector
+  -f compose.yaml -f compose.desktop.yaml -f compose.demo.yaml stop --timeout 30 vector
 docker compose -p runtime-visibility-desktop \
-  -f compose.yaml -f compose.desktop.yaml cp \
+  -f compose.yaml -f compose.desktop.yaml -f compose.demo.yaml cp \
   vector:/var/lib/vector/staging/. "$datastore_data/staging"
 docker compose -p runtime-visibility-desktop \
   -f compose.yaml -f compose.desktop.yaml up --detach vector

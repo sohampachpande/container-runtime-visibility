@@ -2,11 +2,10 @@
 
 This workflow diagnoses a Dockerized application that stops responding while handling a memory-intensive request.
 
-The default `compose.yaml` now runs Juice Shop. Start the original Python OOM
-workload explicitly before following this exercise:
+From the repository root, start the original Python OOM workload:
 
 ~~~sh
-docker compose -f compose.oom.yaml up --build --detach
+docker compose -p container-runtime-visibility -f archive/oom/compose.yaml up --build --detach
 ~~~
 
 ## Test setup
@@ -69,6 +68,4 @@ docker stats container-runtime-visibility-test-app-1
 docker events
 ~~~
 
-## Future eBPF stage
-
-An eBPF collector will observe the kernel OOM event directly, capture the PID and cgroup identity, associate it with the container, and export a metric. That will provide kernel-level attribution without waiting for the Docker exit-state inspection.
+OOM collection is not part of the current telemetry pipeline.

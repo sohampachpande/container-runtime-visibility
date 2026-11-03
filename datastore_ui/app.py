@@ -62,7 +62,7 @@ if view == 'Explore':
         workloads, _ = frame('SELECT DISTINCT container_id_prefix FROM events WHERE container_id_prefix IS NOT NULL ORDER BY 1')
         others = [prefix for prefix in workloads['container_id_prefix'].tolist()
                   if not (configured and len(prefix) >= 12 and monitored.startswith(prefix))]
-        workload = st.selectbox('Workload', ['Juice Shop (monitored)', 'All workloads', *others])
+        workload = st.selectbox('Workload', ['Selected workload', 'All workloads', *others])
         if configured:
             st.caption(f'Monitored container: {monitored[:12]}')
         else:
@@ -70,7 +70,7 @@ if view == 'Explore':
 
     conditions = []
     parameters = []
-    if workload == 'Juice Shop (monitored)':
+    if workload == 'Selected workload':
         if configured:
             conditions.append('length(container_id_prefix) >= 12 AND starts_with(?, container_id_prefix)')
             parameters.append(monitored)

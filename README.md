@@ -64,6 +64,47 @@ acceptance remains in progress.** See [milestones and verified evidence](docs/mi
 [Dashboard and SQL](docs/datastore-ui.md) ·
 [Datastore design](docs/datastore.md).
 
+## Compose setup
+
+`compose.yaml` contains the monitoring stack. Add your application service to
+that file or supply another Compose file with `-f`; `compose.demo.yaml` supplies
+the optional Juice Shop example. On Docker Desktop also include
+`compose.desktop.yaml`. Docker Desktop observes its Linux VM, not macOS.
+
+For example, on Docker Desktop start the demo and select its running container:
+
+```sh
+docker compose -p runtime-visibility-desktop -f compose.yaml -f compose.desktop.yaml -f compose.demo.yaml up -d tetragon juice-shop
+python3 scripts/select-workload.py --desktop
+docker compose -p runtime-visibility-desktop -f compose.yaml -f compose.desktop.yaml -f compose.demo.yaml --profile ui up -d --build vector datastore-ui
+```
+
+For your own application, replace `compose.demo.yaml` with your application
+Compose file and `juice-shop` with its service name. Pass the same files to
+the selector, for example:
+
+```sh
+python3 scripts/select-workload.py --desktop -f compose.yaml -f compose.desktop.yaml -f compose.myapp.yaml myapp
+```
+
+On native Linux omit `--desktop` and `compose.desktop.yaml`. Start the
+application and Tetragon before selection, then start or recreate Vector and
+the optional UI. Reselect and recreate Vector and the UI after the application
+container is replaced. Only one running container is supported; replicas are
+not discovered automatically. The selector's default files target the demo.
+
+The bundled file/network policies are Juice Shop examples, matching
+`/nodejs/bin/node` and, for files, the disposable probe prefix. To configure
+another executable, copy `collector/tetragon/policies` to a local directory,
+edit `matchBinaries` and the file prefix in the copies, and set
+`TETRAGON_POLICY_DIR` to that directory when running Compose. Recreate Tetragon
+and verify policies and events using [the policy guide](docs/security-events.md).
+Executable filters apply host-wide, not just to the selected container; file
+and network events are not filtered by the process selection. A matching
+executable and a loaded policy do not by themselves prove complete coverage.
+
+The earlier OOM exercise is preserved in [archive/oom](archive/oom/debugging-workflow.md).
+
 ## Copyright
 
 Copyright 2026 Soham Pachpande. All rights reserved.

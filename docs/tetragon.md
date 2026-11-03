@@ -3,7 +3,7 @@
 ## Deployment and status
 
 The root `compose.yaml` runs one dedicated Tetragon container on the Linux
-host alongside Vector and Juice Shop. It uses `quay.io/cilium/tetragon:v1.7.0`;
+host alongside Vector; `compose.demo.yaml` adds Juice Shop. It uses `quay.io/cilium/tetragon:v1.7.0`;
 no source build or native package installation is required. See
 [the Docker Desktop guide](docker-desktop.md) for setup, validation, startup, and inspection.
 

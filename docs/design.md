@@ -11,7 +11,7 @@ The collector will run once per Linux node. It will first observe the Docker Com
 ## Test environment
 
 The current development environment is Docker Desktop's Linux VM. Combine
-`compose.yaml` and `compose.desktop.yaml` to run Tetragon, Vector, and Juice
+`compose.yaml`, `compose.desktop.yaml`, and `compose.demo.yaml` to run Tetragon, Vector, and Juice
 Shop. The collector observes the VM's Linux kernel, not macOS. See
 [the local development guide](docker-desktop.md) for verified kernel details
 and commands.
